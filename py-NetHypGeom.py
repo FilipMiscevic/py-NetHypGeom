@@ -1,11 +1,11 @@
 from rpy2.robjects.packages import importr
-from random_walk import *
 from itertools import permutations
 from plotly.offline import plot
 from plotly.graph_objs import *
 
 base = importr('base')
-stats = importr('stats')
+hm = importr("NetHypGeom")
+
 
 ### R wrapper functions ###
 string = '''labne_hm_from_matrix <- function(net, gma = NA, Temp = 0.1, k.speedup = 10, m.in = NA, L.in = NA, w = "auto"){
@@ -19,19 +19,20 @@ string = '''labne_hm_from_matrix <- function(net, gma = NA, Temp = 0.1, k.speedu
   return(labne_hm(g, gma = gma, Temp = Temp, k.speedup = k.speedup, m.in = m.in, L.in = L.in, w = w))
   }
 '''
-
 pp = SignatureTranslatedAnonymousPackage(string,'pp')
 ### R wrapper functions ###
 
 
-def plot_hyperbolic_network(mat,polar_coords,colors=None,labels=[]):
+def plot_hyperbolic_network(mat,polar_coords,colors=None,labels=[], filename='test.html'):
     '''
-    Plot a network
-    :param mat:
-    :param polar_coords:
-    :param colors:
-    :param labels:
-    :return:
+    Plot an undirected network on the hyperbolic disc.
+
+    :param mat: Undirected, binary adjacency matrix.
+    :param polar_coords: Rows of polar coordinates for each node. The first column is radius, the second is theta.
+    :param colors: Optional colors for each node.
+    :param labels: Optional text labels for each node.
+    :param filename: Filename to save the plot.
+    :return: None
     '''
 
     ut = np.triu(mat)
@@ -59,7 +60,7 @@ def plot_hyperbolic_network(mat,polar_coords,colors=None,labels=[]):
         x=[],
         y=[],
         text=labels,
-        mode='markers',
+        mode='markers+text',
         hoverinfo='text',
         marker=Marker(
             showscale=True,
@@ -68,11 +69,11 @@ def plot_hyperbolic_network(mat,polar_coords,colors=None,labels=[]):
             # Jet' | 'RdBu' | 'Blackbody' | 'Earth' | 'Electric' | 'YIOrRd' | 'YIGnBu'
             colorscale='YIGnBu',
             reversescale=True,
-            color=[],
+            color=colors,
             size=10,
             colorbar=dict(
                 thickness=15,
-                title='Node Connections',
+                title='Angular Coordinate (radians)',
                 xanchor='left',
                 titleside='right'
             ),
@@ -96,11 +97,18 @@ def plot_hyperbolic_network(mat,polar_coords,colors=None,labels=[]):
                      xaxis=XAxis(showgrid=False, zeroline=False, showticklabels=False),
                      yaxis=YAxis(showgrid=False, zeroline=False, showticklabels=False)))
 
-    plot(fig, filename='networkx')
-
+    plot(fig, filename=filename)
 
 
 def greedy_route_packets(mat,dist,pairs=None):
+    '''
+    Use the greedy routing strategy to send packets of information between pairs of nodes.
+
+    :param mat: Directed/undirected binary adjacency matrix.
+    :param dist: Distance matrix by which to compute nearest neighbors.
+    :param pairs: Pairs of nodes to test. If None, will test all permutations of node pairs.
+    :return: Array of integers, with the number of edges traversed to reach the target for each pair tested.
+    '''
 
     N = len(dist)
 
@@ -147,6 +155,7 @@ def greedy_route_packets(mat,dist,pairs=None):
 def euclidean_distance(x1, x2=None):
     '''
     Compute distances in Euclidean space.
+
     :param x1: Rows of points in Euclidean space of arbitrary dimension.
     :param x2: Rows of points in Euclidean space to compute distance to. If x2 is None, x1 is used, thereby computing pairwise distances.
     :return: Distance matrix.
@@ -160,6 +169,7 @@ def euclidean_distance(x1, x2=None):
 def hyperbolic_distance(x1, x2=None):
     '''
     Compute distances in hyperbolic space.
+
     :param x1: Rows of points in the H^2 hyperbolic model. The first coordinate is radius and the second is theta, the angular coordinate.
     :param x2: Rows of points in the same format as x1 to compute distance to. If x2 is None, x1 is used, thereby computing pairwise distances.
     :return: Distance matrix.
@@ -182,100 +192,33 @@ def hyperbolic_distance(x1, x2=None):
 
 
 if __name__ == "__main__":
-    # select subject
-    s = 3
+    pass
 
-    d = DatabaseConnection(database='lau2')
+    """
+    TODO: update starter script with test network.
 
-    table = 'right_hemisphere_234'
-    print table
+    W =
+    ED = np.random(W.shape)
 
+    angle = pi/12
 
+    hops = greedy_route_packets(W, ED)
 
-    iq = []
-    e_diff_norm = []
-    e_rout_norm = []
-    e_rout = []
-    e_diff = []
-    cc = []
-    cc_norm = []
-    pl = []
-    pl_norm = []
+    print "ED routing: ", np.count_nonzero(hops) * 1.0 / len(hops)
 
-    W_Ps = []
+    embedded = pp.labne_hm_from_matrix(net=W, gma=2.7, Temp=0.55, k_speedup=0, w=angle)
 
-    ALL_DATA = {}
+    # convert to dataframe
+    embedded_df = pandas2ri.ri2py(test[1])
 
-    #for table in tables:
+    hyperbolic_coords = embedded_df.as_matrix(['r', 'theta'])
 
+    hd = hyperbolic_distance(hyperbolic_coords)
 
-    ids = []
-    EDR = []
-    HMR = []
-    FLR = []
-    scores = []
-    hc = []
-
-    q = 'SELECT `Subject ID`,`Original` from {} '.format(table, s)
-
-    c, r = d.execute_and_return_query(q)
-    if True:
-        for i in range(len(r)):
-            try:
-                id = r[i][0]
-
-                print id
-
-                W_P = read_msgpack(str(r[i][1]))
-
-                W_Ps.append( W_P )
-                ids.append(id)
+    hops2 = greedy_route_packets(W, hd)
 
 
+    print "HM routing: ", np.count_nonzero(hops2) * 1.0 / len(hops2)
+    #plot_hyperbolic_network(W, embedded_df.as_matrix(['r','theta']), embedded_df.as_matrix(['theta']), labels=W_P.major_axis)
 
-                ED = W_P.ED.as_matrix()
-                W = W_P.W.as_matrix()
-                np.fill_diagonal(W,0)
-                np.fill_diagonal(ED,0)
-
-                angle = pi/12
-
-
-                hops = greedy_route_packets(W, ED)
-
-                EDR.append(hops)
-
-                print "ED routing: ", np.count_nonzero(hops) * 1.0 / len(hops)
-
-                #test = pp.labne_hm_from_matrix(net=W, gma=2.3, Temp=0.75, k_speedup=0, w=angle)
-                test = pp.labne_hm_from_matrix(net=W, gma=2.7, Temp=0.55, k_speedup=0, w=angle)
-                test_df = pandas2ri.ri2py(test[1])
-                hyperbolic_coords = test_df.as_matrix(['r', 'theta'])
-                hc.append(hyperbolic_coords)
-
-                gg = hyperbolic_distance(hyperbolic_coords, hyperbolic_coords)
-
-                hops2 = greedy_route_packets(W, gg)
-
-                HMR.append(hops2)
-
-                print "HM routing: ", np.count_nonzero(hops2) * 1.0 / len(hops2)
-                #plot_hyperbolic_network(W, test_df.as_matrix(['r','theta']), labels=W_P.major_axis)
-
-                L = W_P.L.as_matrix()
-                np.fill_diagonal(L,0)
-
-                FL = interpolate_fibre_length(L,ED)
-
-                hops3 = greedy_route_packets(W, FL)
-                FLR.append(hops3)
-                print "FL routing: ", np.count_nonzero(hops3) * 1.0 / len(hops3)
-
-                scores.append([np.count_nonzero(hops) * 1.0 / len(hops),np.count_nonzero(hops3) * 1.0 / len(hops3),np.count_nonzero(hops2) * 1.0 / len(hops2)])
-
-            except Exception as e:
-                print (e, i, id)
-                #print W_P
-                continue
-
-        print 'done!'
+    """
